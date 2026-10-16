@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Pocket Lexicon</title>
+<style>
+/* Layout: one narrow column. Word box on top, speech settings, four language cards (the source one marked), recent lookups below. Fully offline. */
+@font-face { font-family: "Noto Nastaliq Urdu"; src: url("fonts/NotoNastaliqUrdu.ttf"); font-weight: 400 700; font-display: swap; }
+:root {
+  --bg: #F2F4F1; --surface: #FFFFFF; --fg: #16201C; --muted: #566760; --line: #DCE2DD;
+  --accent: #3A3FC2; --accent-fg: #FFFFFF; --accent-soft: #E8E9FA; --danger: #A8281F; --danger-soft: #FBE9E7;
+  --f-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif;
+  --f-serif: "Noto Serif", Georgia, "Times New Roman", "Noto Serif Devanagari", serif;
+  --f-dev: "Noto Serif Devanagari", "Noto Sans Devanagari", "Lohit Devanagari", serif;
+  --f-dev-ui: "Noto Sans Devanagari", "Lohit Devanagari", system-ui, sans-serif;
+  --f-urdu: "Noto Nastaliq Urdu", "Noto Naskh Arabic", "Jameel Noori Nastaleeq", "Geeza Pro", serif;
+  --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1412; --surface: #162019; --fg: #E7EEEA; --muted: #97A99F; --line: #28342E;
+    --accent: #A7ABFF; --accent-fg: #12143A; --accent-soft: #23264F; --danger: #FF9C92; --danger-soft: #3A1E1B;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1412; --surface: #162019; --fg: #E7EEEA; --muted: #97A99F; --line: #28342E;
+  --accent: #A7ABFF; --accent-fg: #12143A; --accent-soft: #23264F; --danger: #FF9C92; --danger-soft: #3A1E1B;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 16px/1.5 var(--f-ui);
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+button, select, textarea { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 4px; }
+.brand { margin: 0; font: italic 500 1.75rem/1.1 var(--f-serif); letter-spacing: -0.01em; text-wrap: balance; }
+.tongues { display: flex; gap: 12px; margin: 0; font-size: 0.9rem; color: var(--muted); }
+.tongues [lang="hi"], .tongues [lang="mr"] { font-family: var(--f-dev-ui); }
+.tongues [lang="ur"] { font-family: var(--f-urdu); }
+
+.input { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.lbl { font: 500 0.75rem/1.2 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+textarea#src {
+  width: 100%; min-height: 84px; max-height: 40vh; resize: none; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--fg);
+  font-size: 1.125rem; line-height: 1.6;
+}
+textarea#src::placeholder { color: var(--muted); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.from { display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.from label { font-size: 0.85rem; color: var(--muted); }
+select { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 44px; }
+.btn { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn:active { transform: translateY(1px); }
+.tries { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tries .lbl { margin-right: 2px; }
+.try { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 0.95rem; }
+.try[lang="hi"], .try[lang="mr"] { font-family: var(--f-dev-ui); }
+.try[lang="ur"] { font-family: var(--f-urdu); line-height: 1.9; }
+
+#status:empty { display: none; }
+.status { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); }
+.status p { margin: 0; flex: 1; min-width: 0; }
+.status.err { background: var(--danger-soft); color: var(--danger); }
+.link { background: none; border: 0; padding: 8px; min-height: 40px; color: inherit; text-decoration: underline; cursor: pointer; font-weight: 500; }
+
+.speech { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+.speech .grp { display: flex; align-items: center; gap: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg button { min-height: 40px; padding: 0 12px; border: 0; background: transparent; cursor: pointer; font-size: 0.9rem; border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.hint { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { margin: 0; font: italic 500 1.25rem/1.3 var(--f-serif); }
+.panel p { margin: 0; color: var(--muted); }
+.wordchips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.sum { display: flex; flex-direction: column; gap: 8px; }
+.sum .q { margin: 0; font: italic 400 1.15rem/1.4 var(--f-serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 0.72rem/1 var(--f-mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 9px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.chip.ex { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.note { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+.cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.lang { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lang.src { border-color: var(--accent); }
+.lh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lname { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.lname .nat { font-weight: 600; font-size: 1rem; }
+.lname .nat[lang="hi"], .lname .nat[lang="mr"] { font-family: var(--f-dev-ui); }
+.lname .nat[lang="ur"] { font-family: var(--f-urdu); }
+.lname .eng { font: 500 0.72rem/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.tag { font: 500 0.68rem/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 7px; border-radius: 5px; background: var(--accent); color: var(--accent-fg); }
+.ibtn { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; }
+.ibtn.listen { color: var(--accent); border-color: var(--accent); font-weight: 500; padding: 0 14px; }
+.ibtn.listen[data-speaking="1"] { background: var(--accent); color: var(--accent-fg); }
+.ibtn.small { min-width: 40px; min-height: 40px; padding: 0 8px; color: var(--accent); }
+.ibtn.small[data-speaking="1"] { background: var(--accent); color: var(--accent-fg); }
+.ico { display: inline-flex; }
+.tx { margin: 0; font: 500 1.9rem/1.3 var(--f-serif); overflow-wrap: anywhere; text-wrap: balance; }
+.lang[lang="hi"] .tx, .lang[lang="mr"] .tx { font-family: var(--f-dev); font-weight: 600; line-height: 1.5; }
+.lang[lang="ur"] .tx { font-family: var(--f-urdu); font-weight: 500; font-size: 1.6rem; line-height: 2.2; text-align: right; }
+.tx.empty { color: var(--muted); font-size: 1.2rem; }
+.roman { margin: -6px 0 0; font: italic 400 1rem/1.4 var(--f-serif); color: var(--muted); }
+.alts { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.alt { white-space: nowrap; }
+.alt[lang="hi"], .alt[lang="mr"] { font-family: var(--f-dev-ui); }
+.alt[lang="ur"] { font-family: var(--f-urdu); }
+.alt i { font: italic 0.85rem var(--f-serif); color: var(--muted); margin-left: 4px; }
+.vl { margin: 0; font: 400 0.72rem/1.3 var(--f-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blk { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.bh { display: flex; align-items: center; justify-content: space-between; }
+.bh h3 { margin: 0; font: 500 0.72rem/1.2 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.mn, .eg { margin: 0; overflow-wrap: anywhere; }
+.mn { font-size: 1.05rem; }
+.eg { color: var(--muted); font-style: italic; }
+.pos { font: 500 0.72rem/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-top: 4px; }
+.defs { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; }
+.defs li::marker { color: var(--muted); font-family: var(--f-mono); font-size: 0.85em; }
+.defs .d { display: block; font-size: 1.05rem; }
+.defs .x { display: block; color: var(--muted); font-style: italic; }
+.defs .s { display: block; font-size: 0.88rem; color: var(--muted); }
+
+.recent h2 { margin: 0 0 8px; font: 500 0.75rem/1.2 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.recent h2 .link { font: 500 0.8rem var(--f-ui); text-transform: none; letter-spacing: 0; color: var(--muted); }
+.recent ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.recent li + li { border-top: 1px solid var(--line); }
+.recent li button { width: 100%; min-height: 48px; padding: 8px 14px; background: none; border: 0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; }
+.recent li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.recent li .k { font: 400 0.72rem/1 var(--f-mono); color: var(--muted); flex: none; text-transform: uppercase; letter-spacing: 0.04em; }
+.foot { margin: 0; font-size: 0.8rem; color: var(--muted); }
+
+#toast { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 420px; padding: 12px 16px; border-radius: 12px; background: var(--fg); color: var(--bg); font-size: 0.9rem; z-index: 20; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (max-width: 460px) { .from { flex-basis: 100%; } .ctl .btn { flex: 1; } }
+@media (max-width: 380px) { .tx { font-size: 1.6rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Pocket Lexicon</h1>
+    <p class="tongues" aria-label="Languages"><span lang="en">English</span><span lang="hi">हिन्दी</span><span lang="mr">मराठी</span><span lang="ur" dir="rtl">اردو</span></p>
+  </header>
+
+  <section class="input" aria-labelledby="l-src">
+    <label id="l-src" for="src" class="lbl">Paste or type a word. Works without internet.</label>
+    <textarea id="src" rows="2" dir="auto" maxlength="2000" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a word here. The meaning and translations appear on their own."></textarea>
+    <div class="ctl">
+      <div class="from">
+        <label for="hint">Word is</label>
+        <select id="hint">
+          <option value="auto">Auto-detect</option>
+          <option value="en">English</option>
+          <option value="hi">हिन्दी</option>
+          <option value="mr">मराठी</option>
+          <option value="ur">اردو</option>
+        </select>
+      </div>
+      <button id="paste" class="btn" type="button">Paste</button>
+      <button id="clear" class="btn" type="button">Clear</button>
+      <button id="go" class="btn primary" type="button">Look up</button>
+    </div>
+    <div id="tries" class="tries"></div>
+  </section>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <section id="speech" class="speech" aria-label="Speech settings"></section>
+  <section id="out" aria-live="polite"></section>
+  <section id="recent" class="recent" hidden aria-labelledby="h-recent"></section>
+  <p class="foot">All word data is stored inside the app, so no internet is needed. English meanings come from Princeton WordNet. Hindi, Marathi and Urdu words come from Wiktionary, so a word can be missing or have only a rough match. Spoken voices come from your phone.</p>
+</div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="core.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var N = window.AndroidBridge || null; // present inside the Android app
+
+  var LANGS = [
+    { code: 'en', name: 'English', nat: 'English', dir: 'ltr', tag: 'en-IN' },
+    { code: 'hi', name: 'Hindi', nat: 'हिन्दी', dir: 'ltr', tag: 'hi-IN' },
+    { code: 'mr', name: 'Marathi', nat: 'मराठी', dir: 'ltr', tag: 'mr-IN' },
+    { code: 'ur', name: 'Urdu', nat: 'اردو', dir: 'rtl', tag: 'ur-PK' }
+  ];
+  var VOICE_NAMES = [['Voice 1', 'Clear'], ['Voice 2', 'Warm'], ['Voice 3', 'Bright']];
+  var PITCH = [1, 0.85, 1.2];
+  var SPEEDS = [['Slow', 0.8], ['Normal', 1], ['Fast', 1.2]];
+  var TRIES = [
+    { t: 'serene', lang: 'en' }, { t: 'abandon', lang: 'en' }, { t: 'पानी', lang: 'hi' },
+    { t: 'पाणी', lang: 'mr' }, { t: 'کتاب', lang: 'ur' }
+  ];
+  function sense(pos, d, ex, syn) { return [pos, [[d, ex || '', syn || []]]]; }
+  var EXAMPLE = {
+    query: 'serene', example: true,
+    data: {
+      detected: 'en', kind: 'word', pos: 'adjective', note: '',
+      items: {
+        en: { text: 'serene', roman: '', meaning: 'Not agitated; without losing self-possession.', example: 'a serene expression', alts: [], mlang: '',
+          senses: [sense('adjective', 'Not agitated; without losing self-possession.', 'a serene expression', ['calm', 'placid'])] },
+        hi: { text: 'शांत', roman: 'shaant', meaning: '', example: '', alts: [['निर्मल', 'nirmal']], senses: null, mlang: '' },
+        mr: { text: 'शांत', roman: 'shaant', meaning: '', example: '', alts: [['निवांत', 'nivaant']], senses: null, mlang: '' },
+        ur: { text: 'پرسکون', roman: 'pur-sukoon', meaning: '', example: '', alts: [['پُرامن', 'pur-aman']], senses: null, mlang: '' }
+      }
+    }
+  };
+
+  var ICON = {
+    speaker: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>'
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v == null || v === false) return;
+        if (k === 'class') e.className = v;
+        else if (k === 'text') e.textContent = v;
+        else e.setAttribute(k, v === true ? '' : v);
+      });
+    }
+    if (kids) [].concat(kids).forEach(function (c) { if (c != null && c !== '') e.append(c.nodeType ? c : document.createTextNode(c)); });
+    return e;
+  }
+  function icon(name) { var s = document.createElement('span'); s.className = 'ico'; s.innerHTML = ICON[name]; return s; }
+  function langOf(code) { return LANGS.filter(function (l) { return l.code === code; })[0]; }
+  function langName(code) { var l = langOf(code); return l ? l.name : 'Other'; }
+  function guessLang(w) { var s = LexiconCore.scriptOf(w); return s === 'deva' ? 'hi' : s === 'arab' ? 'ur' : 'en'; }
+
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  var prefs = Object.assign({ voice: 0, speed: 1 }, store.get('pl5.prefs', {}));
+  if (!(prefs.voice >= 0 && prefs.voice < 3)) prefs.voice = 0;
+  if (!(prefs.speed >= 0 && prefs.speed < 3)) prefs.speed = 1;
+  var history = store.get('pl5.history', []);
+  if (!Array.isArray(history)) history = [];
+
+  var src = $('src'), hint = $('hint'), statusEl = $('status'), outEl = $('out');
+  var runId = 0, current = null;
+
+  // Called by the Android app when text arrives from "Share" or the text-selection menu.
+  window.__incoming = function (t) {
+    if (!t) return;
+    src.value = String(t).slice(0, 2000); fit(); run();
+  };
+
+  // ---------- offline word data ----------
+  // Each data file calls __lex(name, data) when it loads from the app's own files.
+  var shardCache = {}, shardPending = {};
+  window.__lex = function (name, data) { shardCache[name] = data; };
+  function loadShard(name) {
+    if (name in shardCache) return Promise.resolve(shardCache[name]);
+    if (shardPending[name]) return shardPending[name];
+    shardPending[name] = new Promise(function (resolve) {
+      var s = document.createElement('script');
+      s.src = 'lex/' + name + '.js';
+      s.onload = function () { resolve(shardCache[name] || null); };
+      s.onerror = function () { shardCache[name] = null; resolve(null); };
+      document.head.append(s);
+    });
+    return shardPending[name];
+  }
+  var core = LexiconCore.create({ load: loadShard });
+
+  // ---------- toast ----------
+  var toastTimer;
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
+  }
+
+  // ---------- speech ----------
+  var synth = window.speechSynthesis;
+  var canSpeak = !!N || (!!synth && 'SpeechSynthesisUtterance' in window);
+  var bvoices = [];
+  function loadBrowserVoices() { try { bvoices = synth.getVoices() || []; } catch (e) { bvoices = []; } }
+  if (!N && canSpeak) {
+    loadBrowserVoices();
+    if (synth.addEventListener) synth.addEventListener('voiceschanged', function () { loadBrowserVoices(); updateVoiceLabels(); });
+  }
+  function norm(l) { return (l || '').replace('_', '-').toLowerCase(); }
+  function allVoices(code) {
+    if (N) { try { return JSON.parse(N.getVoices(code)) || []; } catch (e) { return []; } }
+    return bvoices.filter(function (v) { return norm(v.lang).split('-')[0] === code; })
+      .map(function (v) { return { name: v.name, lang: v.lang, net: !v.localService, _v: v }; });
+  }
+  function voicesFor(code) {
+    var l = allVoices(code);
+    if (!l.length && code === 'mr') l = allVoices('hi');
+    var pref = langOf(code).tag.toLowerCase();
+    return l.slice().sort(function (a, b) {
+      // Offline reading: voices that work without internet come first.
+      var na = a.net ? 1 : 0, nb = b.net ? 1 : 0;
+      var pa = norm(a.lang) === pref ? 0 : 1, pb = norm(b.lang) === pref ? 0 : 1;
+      return na - nb || pa - pb || a.name.localeCompare(b.name);
+    });
+  }
+  function pickVoice(code) {
+    var list = voicesFor(code), i = prefs.voice;
+    return { voice: list.length ? list[i % list.length] : null, pitch: i < list.length ? 1 : PITCH[i] };
+  }
+  function updateVoiceLabels() {
+    [].forEach.call(document.querySelectorAll('.vl'), function (p) {
+      var pk = pickVoice(p.getAttribute('data-code'));
+      p.textContent = 'Voice ' + (prefs.voice + 1) + ' · ' + (pk.voice ? pk.voice.name + (pk.voice.net ? ' (needs internet)' : '') : 'phone default');
+    });
+  }
+  var speakingBtn = null, startTimer = null, ttsSeq = 0, ttsCb = {};
+  window.__tts = function (id, ev) { var cb = ttsCb[id]; if (cb) cb(ev); };
+
+  function mark(btn, on) {
+    if (!btn) return;
+    btn.setAttribute('data-speaking', on ? '1' : '0');
+    var small = btn.classList.contains('small');
+    btn.replaceChildren(icon(on ? 'stop' : 'speaker'));
+    if (!small) btn.append(on ? 'Stop' : 'Listen');
+    btn.setAttribute('aria-label', (on ? 'Stop ' : 'Listen to ') + (btn.getAttribute('data-what') || 'text'));
+  }
+  function stopSpeech() {
+    clearTimeout(startTimer);
+    if (N) { try { N.stop(); } catch (e) {} }
+    else if (canSpeak) { try { synth.cancel(); } catch (e) {} }
+    if (speakingBtn) { mark(speakingBtn, false); speakingBtn = null; }
+  }
+  function speak(code, text, btn) {
+    if (!canSpeak) { toast('This device cannot read text aloud.'); return; }
+    if (speakingBtn === btn) { stopSpeech(); return; }
+    stopSpeech();
+    var pk = pickVoice(code), L = langOf(code), rate = SPEEDS[prefs.speed][1];
+    function fail() { toast('No ' + L.name + ' voice is available on this phone. Download one in Settings > Text-to-speech so it works offline.'); }
+    if (N) {
+      var id = String(++ttsSeq), retried = false;
+      ttsCb[id] = function (ev) {
+        if (ev === 'start') return;
+        if (ev === 'nolang' && code === 'mr' && !retried) { retried = true; N.speak(id, text, '', 'hi-IN', rate, pk.pitch); return; }
+        if (speakingBtn === btn) { mark(btn, false); speakingBtn = null; }
+        delete ttsCb[id];
+        if (ev === 'nolang' || ev === 'error') fail();
+      };
+      speakingBtn = btn; mark(btn, true);
+      N.speak(id, text, pk.voice ? pk.voice.name : '', pk.voice ? pk.voice.lang : L.tag, rate, pk.pitch);
+      setTimeout(updateVoiceLabels, 300);
+      return;
+    }
+    var started = false, u = new SpeechSynthesisUtterance(text);
+    u.lang = pk.voice ? pk.voice.lang : L.tag;
+    if (pk.voice && pk.voice._v) u.voice = pk.voice._v;
+    u.rate = rate; u.pitch = pk.pitch;
+    u.onstart = function () { started = true; clearTimeout(startTimer); };
+    u.onend = function () { clearTimeout(startTimer); if (speakingBtn === btn) { mark(btn, false); speakingBtn = null; } };
+    u.onerror = function (e) {
+      clearTimeout(startTimer);
+      if (speakingBtn === btn) { mark(btn, false); speakingBtn = null; }
+      if (e && e.error && e.error !== 'canceled' && e.error !== 'interrupted') fail();
+    };
+    speakingBtn = btn; mark(btn, true);
+    try { synth.speak(u); } catch (e) { stopSpeech(); fail(); return; }
+    startTimer = setTimeout(function () { if (speakingBtn === btn && !started) { stopSpeech(); fail(); } }, 4500);
+  }
+
+  function seg(label, opts, selected, onPick) {
+    var wrap = el('div', { class: 'grp' }, [el('span', { class: 'lbl', text: label })]);
+    var box = el('div', { class: 'seg', role: 'group', 'aria-label': label });
+    opts.forEach(function (o, i) {
+      var b = el('button', { type: 'button', 'aria-pressed': i === selected ? 'true' : 'false', text: o });
+      b.addEventListener('click', function () {
+        [].forEach.call(box.children, function (c, j) { c.setAttribute('aria-pressed', j === i ? 'true' : 'false'); });
+        onPick(i);
+      });
+      box.append(b);
+    });
+    wrap.append(box);
+    return wrap;
+  }
+  function buildSpeech() {
+    var box = $('speech'); box.replaceChildren();
+    if (!canSpeak) { box.append(el('p', { class: 'hint', text: 'This device cannot read text aloud, so the Listen buttons are unavailable.' })); return; }
+    box.append(
+      seg('Voice', VOICE_NAMES.map(function (v) { return v[0] + ' · ' + v[1]; }), prefs.voice, function (i) {
+        prefs.voice = i; store.set('pl5.prefs', prefs); stopSpeech(); updateVoiceLabels();
+      }),
+      seg('Speed', SPEEDS.map(function (s) { return s[0]; }), prefs.speed, function (i) {
+        prefs.speed = i; store.set('pl5.prefs', prefs);
+      })
+    );
+  }
+
+  // ---------- copy ----------
+  function copyText(text) {
+    if (N && N.copy) { try { N.copy(text); toast('Copied'); return; } catch (e) {} }
+    var ta = el('textarea', { 'aria-hidden': 'true', readonly: true });
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.append(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove(); toast(ok ? 'Copied' : 'Select the text and copy it by hand.');
+  }
+
+  // ---------- rendering ----------
+  function listenBtn(code, text, what, small) {
+    var b = el('button', { type: 'button', class: 'ibtn ' + (small ? 'small' : 'listen'), 'data-what': what });
+    b.addEventListener('click', function () { speak(code, text, b); });
+    mark(b, false);
+    return b;
+  }
+  function altsLine(alts, L) {
+    var p = el('p', { class: 'alts' }, [el('span', { class: 'lbl', text: 'Also' })]);
+    alts.forEach(function (a) {
+      p.append(el('span', { class: 'alt', lang: L.code, dir: L.dir }, [a[0], a[1] ? el('i', { text: a[1] }) : null]));
+    });
+    return p;
+  }
+  function sensesBlock(it, L) {
+    var wrap = el('div', { class: 'blk' });
+    var spoken = [];
+    it.senses.forEach(function (g) {
+      g[1].forEach(function (s, i) { if (spoken.length < 3 && i === 0) spoken.push(s[0]); });
+    });
+    var bh = el('div', { class: 'bh' }, [el('h3', { text: 'Meaning' })]);
+    bh.append(listenBtn('en', spoken.join('. '), 'English meaning', true));
+    wrap.append(bh);
+    it.senses.forEach(function (g) {
+      wrap.append(el('div', { class: 'pos', text: g[0] }));
+      var ol = el('ol', { class: 'defs' });
+      g[1].forEach(function (s) {
+        var li = el('li', null, [el('span', { class: 'd', text: s[0] })]);
+        if (s[1]) li.append(el('span', { class: 'x', text: '“' + s[1] + '”' }));
+        if (s[2] && s[2].length) li.append(el('span', { class: 's', text: 'Synonyms: ' + s[2].join(', ') }));
+        ol.append(li);
+      });
+      wrap.append(ol);
+    });
+    return wrap;
+  }
+  function card(L, res, isSource) {
+    var it = res.data.items[L.code];
+    var c = el('section', { class: 'lang' + (isSource ? ' src' : ''), lang: L.code, 'aria-label': L.name });
+    var head = el('div', { class: 'lh' }, [
+      el('div', { class: 'lname' }, [el('span', { class: 'nat', lang: L.code, dir: L.dir, text: L.nat }), L.code === 'en' ? null : el('span', { class: 'eng', text: L.name })]),
+      isSource ? el('span', { class: 'tag', text: 'Original' }) : null
+    ]);
+    if (it.text) {
+      var cp = el('button', { type: 'button', class: 'ibtn', 'aria-label': 'Copy ' + L.name + ' text' }, [icon('copy')]);
+      cp.addEventListener('click', function () { copyText(it.text); });
+      head.append(cp, listenBtn(L.code, it.text, L.name + ' text', false));
+    }
+    c.append(head);
+    c.append(el('p', { class: 'tx' + (it.text ? '' : ' empty'), dir: L.dir, text: it.text || 'Not in the offline word list' }));
+    if (it.roman && L.code !== 'en') c.append(el('p', { class: 'roman', text: it.roman }));
+    if (it.alts && it.alts.length) c.append(altsLine(it.alts, L));
+    if (it.text && canSpeak) c.append(el('p', { class: 'vl', 'data-code': L.code }));
+    if (it.senses && it.senses.length) {
+      c.append(sensesBlock(it, L));
+    } else if (it.meaning) {
+      var ml = it.mlang || L.code, md = ml === 'en' ? 'ltr' : L.dir;
+      var bh = el('div', { class: 'bh' }, [el('h3', { text: ml === 'en' && L.code !== 'en' ? 'Meaning (English)' : 'Meaning' })]);
+      bh.append(listenBtn(ml, it.meaning, L.name + ' meaning', true));
+      c.append(el('div', { class: 'blk' }, [bh, el('p', { class: 'mn', lang: ml, dir: md, text: it.meaning })]));
+    }
+    return c;
+  }
+  function renderOut(res) {
+    stopSpeech(); outEl.replaceChildren();
+    var r = res.data;
+    var chips = el('div', { class: 'chips' }, [
+      res.example ? el('span', { class: 'chip ex', text: 'Example' }) : null,
+      el('span', { class: 'chip', text: 'Word is ' + langName(r.detected) }),
+      r.pos ? el('span', { class: 'chip', text: r.pos }) : null
+    ]);
+    var sum = el('div', { class: 'sum' }, [el('p', { class: 'q', dir: 'auto', text: res.query }), chips]);
+    if (r.note) sum.append(el('p', { class: 'note', text: r.note }));
+    var cards = el('div', { class: 'cards' });
+    LANGS.forEach(function (L) { cards.append(card(L, res, L.code === r.detected)); });
+    outEl.append(sum, cards);
+    updateVoiceLabels();
+  }
+  function wordChip(w) {
+    var l = guessLang(w);
+    var b = el('button', { type: 'button', class: 'try', lang: l, dir: l === 'ur' ? 'rtl' : null, text: w });
+    b.addEventListener('click', function () { src.value = w; fit(); run(); window.scrollTo(0, 0); });
+    return b;
+  }
+  function renderMulti(tokens) {
+    stopSpeech(); outEl.replaceChildren();
+    var chips = el('div', { class: 'wordchips' });
+    tokens.forEach(function (w) { chips.append(wordChip(w)); });
+    outEl.append(el('div', { class: 'panel' }, [
+      el('h2', { text: 'Tap a word to look it up' }),
+      el('p', { text: 'The offline dictionary looks up one word at a time.' }),
+      chips
+    ]));
+  }
+  function renderNotFound(r) {
+    stopSpeech(); outEl.replaceChildren();
+    var p = el('div', { class: 'panel' }, [
+      el('h2', { text: 'No entry for “' + r.query + '”' }),
+      el('p', { text: r.script === 'latn'
+        ? 'It is not in the offline word list. Check the spelling, or try the base form (for example “walk” instead of “walked”).'
+        : 'It is not in the offline word list. Try the base form of the word, or a different spelling.' })
+    ]);
+    if (r.suggestions && r.suggestions.length) {
+      var chips = el('div', { class: 'wordchips' });
+      r.suggestions.forEach(function (w) { chips.append(wordChip(w)); });
+      p.append(el('p', { text: 'Did you mean' }), chips);
+    }
+    outEl.append(p);
+  }
+  function renderTries() {
+    var box = $('tries');
+    box.append(el('span', { class: 'lbl', text: 'Try' }));
+    TRIES.forEach(function (x) { box.append(wordChip(x.t)); });
+  }
+  function renderRecent() {
+    var box = $('recent'); box.replaceChildren();
+    if (!history.length) { box.hidden = true; return; }
+    box.hidden = false;
+    var clr = el('button', { type: 'button', class: 'link', text: 'Clear history' });
+    clr.addEventListener('click', function () { history = []; store.set('pl5.history', history); renderRecent(); });
+    box.append(el('h2', { id: 'h-recent' }, [el('span', { text: 'Recent' }), clr]));
+    var ul = el('ul');
+    history.forEach(function (h) {
+      var b = el('button', { type: 'button' }, [
+        el('span', { class: 't', dir: 'auto', text: h.query }),
+        el('span', { class: 'k', text: langName(h.data.detected) })
+      ]);
+      b.addEventListener('click', function () {
+        runId++; src.value = h.query; fit(); statusEl.replaceChildren(); current = h; renderOut(h); window.scrollTo(0, 0);
+      });
+      ul.append(el('li', null, [b]));
+    });
+    box.append(ul);
+  }
+
+  // ---------- lookup ----------
+  function addHistory(res) {
+    history = history.filter(function (h) { return h.query !== res.query; });
+    history.unshift({ query: res.query, data: res.data });
+    history = history.slice(0, 20);
+    store.set('pl5.history', history);
+    renderRecent();
+  }
+  async function run() {
+    var text = src.value.trim().slice(0, 2000);
+    if (!text) { toast('Paste or type something first.'); return; }
+    var my = ++runId, r;
+    statusEl.replaceChildren();
+    try { r = await core.lookup(text, hint.value); } catch (e) { r = { kind: 'error' }; }
+    if (my !== runId) return;
+    if (r.kind === 'word') { current = { query: text, data: r.data }; addHistory(current); renderOut(current); }
+    else if (r.kind === 'multi') renderMulti(r.tokens);
+    else if (r.kind === 'notfound') renderNotFound(r);
+    else statusEl.replaceChildren(el('div', { class: 'status err' }, [el('p', { text: 'The word data could not be read. Close the app and open it again.' })]));
+  }
+
+  // ---------- wiring ----------
+  function fit() { src.style.height = 'auto'; src.style.height = Math.min(src.scrollHeight, window.innerHeight * 0.4) + 'px'; }
+  src.addEventListener('input', fit);
+  src.addEventListener('paste', function () { setTimeout(function () { fit(); run(); }, 50); });
+  src.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } });
+  $('go').addEventListener('click', run);
+  $('paste').addEventListener('click', async function () {
+    var t = '';
+    try { t = (N && N.paste) ? N.paste() : await navigator.clipboard.readText(); } catch (e) {}
+    if (!t || !t.trim()) { toast('Nothing to paste. Copy a word first.'); return; }
+    src.value = t.slice(0, 2000); fit(); run();
+  });
+  $('clear').addEventListener('click', function () {
+    runId++;
+    src.value = ''; fit(); statusEl.replaceChildren(); stopSpeech();
+    current = EXAMPLE; renderOut(EXAMPLE); src.focus();
+  });
+
+  buildSpeech();
+  renderTries();
+  renderRecent();
+  current = EXAMPLE;
+  renderOut(EXAMPLE);
+  setTimeout(updateVoiceLabels, 1500);
+})();
+</script>
+</body>
+</html>
